@@ -2,6 +2,24 @@ import AppKit
 import Foundation
 import TokenozercaCore
 
+struct MonitoredSession: Identifiable, Sendable {
+    var id: String { candidate.id }
+    let candidate: SessionCandidate
+    let analysis: AnalysisResult
+    let costReport: CostReport
+
+    var provider: Provider { candidate.metadata.provider }
+    var modifiedAt: Date { candidate.modifiedAt }
+
+    var displayName: String {
+        if let workingDirectory = candidate.metadata.workingDirectory {
+            let name = URL(fileURLWithPath: workingDirectory).lastPathComponent
+            if !name.isEmpty { return name }
+        }
+        return "Rozmowa \(candidate.metadata.sessionID.prefix(8))"
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var runs: [BenchmarkRun] = []
@@ -12,6 +30,10 @@ final class AppModel: ObservableObject {
     @Published var statusMessage = "Gotowy"
     @Published var isRefreshing = false
     @Published var lastError: String?
+    @Published var monitoredSessions: [MonitoredSession] = []
+    @Published var isMonitoring = false
+    @Published var lastMonitoringRefresh: Date?
+    @Published var monitoringWarnings: [String] = []
 
     let discovery: SessionDiscovery
     private let analyzer: SessionAnalyzer
@@ -32,6 +54,7 @@ final class AppModel: ObservableObject {
         self.runs = store.load().sorted { $0.createdAt > $1.createdAt }
         self.activeRunID = runs.first(where: { $0.endedAt == nil })?.id
         startTimer()
+        refreshMonitoredSessions()
         refreshRecentSessions()
         refreshActiveRun()
     }
@@ -46,14 +69,66 @@ final class AppModel: ObservableObject {
     }
 
     var menuBarTitle: String {
-        guard let run = activeRun else { return "🦖" }
-        if let cost = run.lastCostReport?.tokenCostUSD {
-            return "🦖 \(Self.currency(cost))"
+        if let run = activeRun, let report = run.lastCostReport, report.tokenCostUSD != nil {
+            return "🦖 \(Self.costLabel(report))"
         }
-        if let tokens = run.lastAnalysis?.totalUsage.total, tokens > 0 {
+        if let run = activeRun, let tokens = run.lastAnalysis?.totalUsage.total, tokens > 0 {
             return "🦖 \(Self.compactTokens(tokens))"
         }
-        return "🦖 •"
+        guard let latest = monitoredSessions.first else { return "🦖" }
+        if latest.costReport.tokenCostUSD != nil {
+            return "🦖 \(Self.costLabel(latest.costReport))"
+        }
+        return "🦖 \(Self.compactTokens(latest.analysis.totalUsage.total))"
+    }
+
+    func refreshMonitoredSessions() {
+        guard !isMonitoring else { return }
+        isMonitoring = true
+
+        let discovery = self.discovery
+        let analyzer = self.analyzer
+        let pricing = self.pricingEngine
+        let cached = Dictionary(uniqueKeysWithValues: monitoredSessions.map { ($0.id, $0) })
+
+        Task {
+            let refreshed = await Task.detached(priority: .utility) { () -> ([MonitoredSession], [String]) in
+                let cutoff = Date().addingTimeInterval(-30 * 60)
+                let candidates = Provider.allCases
+                    .flatMap { discovery.recentDesktopSessions(provider: $0, limit: 6) }
+                    .filter { $0.modifiedAt >= cutoff }
+                    .sorted { $0.modifiedAt > $1.modifiedAt }
+                    .prefix(6)
+
+                var sessions: [MonitoredSession] = []
+                var warnings: [String] = []
+                for candidate in candidates {
+                    if let cachedSession = cached[candidate.id], cachedSession.modifiedAt == candidate.modifiedAt {
+                        sessions.append(cachedSession)
+                        continue
+                    }
+                    do {
+                        let analysis = try analyzer.analyze(
+                            rootURL: candidate.url,
+                            provider: candidate.metadata.provider
+                        )
+                        sessions.append(MonitoredSession(
+                            candidate: candidate,
+                            analysis: analysis,
+                            costReport: pricing.calculate(analysis)
+                        ))
+                    } catch {
+                        warnings.append("\(candidate.metadata.provider.displayName): \(error.localizedDescription)")
+                    }
+                }
+                return (sessions.sorted { $0.modifiedAt > $1.modifiedAt }, warnings)
+            }.value
+
+            self.monitoredSessions = refreshed.0
+            self.monitoringWarnings = refreshed.1
+            self.lastMonitoringRefresh = Date()
+            self.isMonitoring = false
+        }
     }
 
     func startRun() {
@@ -220,7 +295,10 @@ final class AppModel: ObservableObject {
 
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshActiveRun() }
+            Task { @MainActor in
+                self?.refreshMonitoredSessions()
+                self?.refreshActiveRun()
+            }
         }
     }
 
@@ -245,6 +323,16 @@ final class AppModel: ObservableObject {
     static func currency(_ value: Decimal) -> String {
         let number = NSDecimalNumber(decimal: value).doubleValue
         return String(format: "$%.2f", number)
+    }
+
+    static func costLabel(_ report: CostReport) -> String {
+        costLabel(report.tokenCostUSD, accuracy: report.accuracy)
+    }
+
+    static func costLabel(_ value: Decimal?, accuracy: MeasurementAccuracy) -> String {
+        guard let value else { return "Brak ceny" }
+        let formatted = currency(value)
+        return accuracy == .partial ? "≥\(formatted)" : formatted
     }
 
     private static func makeRunID(label: String, provider: Provider) -> String {

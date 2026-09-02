@@ -23,10 +23,19 @@ Wersja MVP jest także zainstalowana jako `/Applications/Tokenożerca.app`. Po u
 
 Tokenożerca otwiera te pliki wyłącznie do odczytu. Nie wysyła transkryptów ani metadanych przez sieć.
 
-## Pomiar
+## Automatyczne monitorowanie
 
 1. Kliknij ikonę `🦖` w pasku menu.
-2. Podaj nazwę benchmarku i wybierz dostawcę.
+2. Tokenożerca automatycznie pokaże root sessions Codex Desktop i Claude Desktop aktualizowane w ostatnich 30 minutach.
+3. Każda karta pokazuje łączne tokeny, model i API-equivalent cost. Szczegóły zawierają podział na input, cache, output i reasoning/thinking.
+4. Lista odświeża się co 5 sekund. Niezmienione pliki korzystają z ostatniego wyliczenia.
+
+Nie trzeba rozpoczynać pomiaru ani wklejać `RUN_ID`, aby zobaczyć koszt zwykłej rozmowy.
+
+## Benchmark kontrolowany
+
+1. Kliknij ikonę `🦖` w pasku menu.
+2. Rozwiń `Benchmark kontrolowany`, podaj nazwę i wybierz dostawcę.
 3. Kliknij `Rozpocznij i skopiuj RUN_ID`.
 4. Otwórz nową rozmowę w aplikacji desktopowej i wklej identyfikator na początku promptu.
 5. Tokenożerca automatycznie dołączy nowy plik sesji. W razie potrzeby użyj ręcznego `Dołącz`.
@@ -44,6 +53,7 @@ Snapshot stawek ma identyfikator `webinar-2026-09-02-v1`. Nieznany model otrzymu
 ## Znane ograniczenia
 
 - Przed webinarem trzeba wykonać świeży kontrolowany run z jednym subagentem w każdej aplikacji oraz ręczny dry run całego interfejsu.
+- Automatyczne sesje nie są jeszcze zapisywane jako trwała historia. Baza wszystkich rozmów, filtrowanie i późniejsze przeliczanie to zaplanowany kolejny etap; obecna historia obejmuje kontrolowane benchmarki.
 - Nieujawnione opłaty za narzędzia nie są doliczane; raport mówi o tym wprost.
 - Aplikacja co 5 sekund ponownie analizuje przypięte pliki. Jest to wystarczające dla obecnych logów, ale bardzo duże, wielodniowe sesje mogą wymagać później odczytu przyrostowego.
 - Format lokalnych logów dostawców nie jest publicznym, stabilnym API. Zmiana formatu może wymagać aktualizacji parsera.

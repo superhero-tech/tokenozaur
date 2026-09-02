@@ -4,26 +4,176 @@ import TokenozercaCore
 
 struct MenuContentView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var benchmarkExpanded = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                liveSessions
+                benchmark
+                footer
+            }
+            .padding(16)
+        }
+        .frame(minHeight: 420, maxHeight: 720)
+        .onChange(of: model.selectedProvider) { _ in
+            model.refreshRecentSessions()
+        }
+        .onChange(of: model.activeRunID) { value in
+            if value != nil { benchmarkExpanded = true }
+        }
+        .onAppear {
+            benchmarkExpanded = model.activeRun != nil
+        }
+    }
+
+    private var liveSessions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Aktywne sesje").font(.headline)
+                    Text("Codex i Claude • automatycznie")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if model.isMonitoring {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button { model.refreshMonitoredSessions() } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Odśwież teraz")
+                }
+            }
+
+            if model.monitoredSessions.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Brak aktywnych rozmów", systemImage: "moon.zzz")
+                        .font(.caption.bold())
+                    Text("Nowa lub wznowiona rozmowa pojawi się tutaj bez RUN_ID. Pokazujemy sesje aktualizowane w ostatnich 30 minutach.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+            } else {
+                ForEach(model.monitoredSessions) { session in
+                    liveSessionCard(session)
+                }
+            }
+
+            if let warning = model.monitoringWarnings.first {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private func liveSessionCard(_ session: MonitoredSession) -> some View {
+        DisclosureGroup {
+            sessionDetails(session.analysis, report: session.costReport)
+                .padding(.top, 8)
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                Text(session.provider == .codex ? "Cx" : "Cl")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 26, height: 26)
+                    .background(session.provider == .codex ? Color.green : Color.orange, in: RoundedRectangle(cornerRadius: 7))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.displayName)
+                        .font(.caption.bold())
+                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(session.provider.displayName)
+                        Text("•")
+                        Text(String(session.candidate.metadata.sessionID.prefix(8)))
+                            .monospaced()
+                        Text("•")
+                        Text(session.modifiedAt, style: .relative)
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(AppModel.compactTokens(session.analysis.totalUsage.total))
+                        .font(.caption.bold().monospacedDigit())
+                    Text(AppModel.costLabel(session.costReport))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(session.costReport.accuracy == .exact ? Color.secondary : Color.orange)
+                }
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func sessionDetails(_ analysis: AnalysisResult, report: CostReport) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                metric("Tokeny", AppModel.compactTokens(analysis.totalUsage.total))
+                Spacer()
+                metric("API-equivalent", AppModel.costLabel(report))
+            }
+            Divider()
+            gridUsage(analysis.totalUsage)
+            ForEach(analysis.modelUsage) { model in
+                HStack {
+                    Text(model.modelID)
+                    Spacer()
+                    Text("\(model.requestCount) requestów")
+                }
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+            }
+            HStack {
+                Text("Sesje: \(analysis.sessions.count)")
+                Spacer()
+                Text("Tool calls: \(analysis.toolCallCount)")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            if let warning = report.warnings.first {
+                Text(warning)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(3)
+            }
+        }
+    }
+
+    private var benchmark: some View {
+        DisclosureGroup(isExpanded: $benchmarkExpanded) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("RUN_ID i checkpointy są potrzebne tylko do kontrolowanego porównania dwóch narzędzi.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 if let run = model.activeRun {
                     activeRun(run)
                 } else {
                     newRun
                 }
                 status
-                recentSessions
+                if model.activeRun?.rootSessionPath == nil {
+                    recentSessions
+                }
                 history
-                footer
             }
-            .padding(16)
-        }
-        .frame(minHeight: 480, maxHeight: 720)
-        .onChange(of: model.selectedProvider) { _ in
-            model.refreshRecentSessions()
+            .padding(.top, 10)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Benchmark kontrolowany").font(.headline)
+                Text(model.activeRun == nil ? "Opcjonalny" : "Pomiar trwa")
+                    .font(.caption2)
+                    .foregroundStyle(model.activeRun == nil ? Color.secondary : Color.green)
+            }
         }
     }
 
@@ -90,32 +240,9 @@ struct MenuContentView: View {
     }
 
     private func measurement(_ run: BenchmarkRun) -> some View {
-        let usage = run.lastAnalysis?.totalUsage ?? .zero
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                metric("Łącznie", AppModel.compactTokens(usage.total))
-                Spacer()
-                metric("API-equivalent", run.lastCostReport?.tokenCostUSD.map(AppModel.currency) ?? "Brak ceny")
-            }
-            Divider()
-            gridUsage(usage)
-            if let analysis = run.lastAnalysis {
-                HStack {
-                    Text("Sesje: \(analysis.sessions.count)")
-                    Spacer()
-                    Text("Tool calls: \(analysis.toolCallCount)")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                ForEach(analysis.modelUsage) { model in
-                    HStack {
-                        Text(model.modelID)
-                        Spacer()
-                        Text(AppModel.compactTokens(model.usage.total))
-                    }
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            if let analysis = run.lastAnalysis, let report = run.lastCostReport {
+                sessionDetails(analysis, report: report)
             }
             if !run.checkpoints.isEmpty {
                 Divider()
@@ -124,7 +251,7 @@ struct MenuContentView: View {
                         Text(checkpoint.kind.displayName)
                         Spacer()
                         Text(AppModel.compactTokens(checkpoint.usage.total))
-                        Text(checkpoint.apiEquivalentUSD.map(AppModel.currency) ?? "—")
+                        Text(AppModel.costLabel(checkpoint.apiEquivalentUSD, accuracy: checkpoint.accuracy))
                             .monospacedDigit()
                     }
                     .font(.caption)
@@ -168,7 +295,7 @@ struct MenuContentView: View {
 
     private var newRun: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Nowy pomiar").font(.headline)
+            Text("Nowy benchmark").font(.headline)
             TextField("Nazwa, np. Build Splitwise", text: $model.newRunLabel)
             Picker("Narzędzie", selection: $model.selectedProvider) {
                 ForEach(Provider.allCases, id: \.self) { provider in
@@ -197,7 +324,7 @@ struct MenuContentView: View {
     private var recentSessions: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Ostatnie sesje").font(.headline)
+            Text("Ręczne dołączenie").font(.headline)
                 Spacer()
                 Button { model.refreshRecentSessions() } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.plain)
@@ -237,7 +364,7 @@ struct MenuContentView: View {
                         Text(run.provider.displayName).font(.caption2).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(run.lastCostReport?.tokenCostUSD.map(AppModel.currency) ?? "—")
+                    Text(run.lastCostReport.map(AppModel.costLabel) ?? "—")
                         .font(.caption.monospacedDigit())
                 }
             }

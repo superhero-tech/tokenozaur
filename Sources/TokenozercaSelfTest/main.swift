@@ -44,6 +44,10 @@ do {
     check(codexChild.metadata.parentSessionID == "codex-root", "Codex child relation")
     check(codexChild.totalUsage.inputUncached == 40, "Codex child usage")
 
+    let codexGuardian = try CodexLogAdapter().parse(at: fixture("codex-guardian"))
+    check(codexGuardian.metadata.parentSessionID == "codex-root", "Codex direct parent relation")
+    check(codexGuardian.metadata.agentID == "guardian", "Codex guardian classification")
+
     let claude = try ClaudeLogAdapter().parse(at: fixture("claude-root"))
     check(claude.metadata.sessionID == "claude-root", "Claude metadata")
     check(claude.metadata.isDesktop, "Claude desktop entrypoint")

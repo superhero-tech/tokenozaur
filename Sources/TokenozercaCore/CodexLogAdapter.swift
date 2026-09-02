@@ -122,8 +122,10 @@ public struct CodexLogAdapter: Sendable {
         let source = payload["source"] as? [String: Any]
         let subagent = source?["subagent"] as? [String: Any]
         let threadSpawn = subagent?["thread_spawn"] as? [String: Any]
-        let parentID = threadSpawn?["parent_thread_id"] as? String
-        let agentID = (threadSpawn?["agent_path"] as? String) ?? (threadSpawn?["agent_nickname"] as? String)
+        let parentID = (payload["parent_thread_id"] as? String) ?? (threadSpawn?["parent_thread_id"] as? String)
+        let agentID = (threadSpawn?["agent_path"] as? String)
+            ?? (threadSpawn?["agent_nickname"] as? String)
+            ?? (subagent?["other"] as? String)
 
         return SessionMetadata(
             provider: .codex,
