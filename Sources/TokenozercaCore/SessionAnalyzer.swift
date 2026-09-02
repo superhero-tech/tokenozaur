@@ -75,6 +75,27 @@ public struct SessionDiscovery: Sendable {
         Set(recentDesktopSessions(provider: provider, limit: 100).map { $0.url.path })
     }
 
+    public func allDesktopSessionFiles(provider: Provider) -> [SessionCandidate] {
+        let root = provider == .codex ? codexRoot : claudeRoot
+        return jsonlFiles(under: root)
+            .compactMap { url -> SessionCandidate? in
+                guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let modifiedAt = values.contentModificationDate else { return nil }
+                do {
+                    let metadata: SessionMetadata
+                    switch provider {
+                    case .codex: metadata = try CodexLogAdapter().metadata(at: url)
+                    case .claude: metadata = try ClaudeLogAdapter().metadata(at: url)
+                    }
+                    guard metadata.isDesktop else { return nil }
+                    return SessionCandidate(url: url, metadata: metadata, modifiedAt: modifiedAt)
+                } catch {
+                    return nil
+                }
+            }
+            .sorted { $0.modifiedAt > $1.modifiedAt }
+    }
+
     public func codexDescendants(of rootSessionID: String, startedAt: Date?) -> [URL] {
         let threshold = startedAt?.addingTimeInterval(-60)
         var parentIDs: Set<String> = [rootSessionID]

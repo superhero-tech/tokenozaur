@@ -9,6 +9,7 @@ public enum JSONLReader {
     @discardableResult
     public static func forEachObject(
         at url: URL,
+        lineMustContainOneOf fragments: [String] = [],
         _ body: ([String: Any], Int) throws -> Void
     ) throws -> JSONLReadSummary {
         guard let handle = try? FileHandle(forReadingFrom: url) else {
@@ -20,6 +21,11 @@ public enum JSONLReader {
         var validObjects = 0
         var invalidLines = 0
         var lineNumber = 0
+        let fragmentData = fragments.map { Data($0.utf8) }
+
+        func shouldRead(_ line: Data) -> Bool {
+            fragmentData.isEmpty || fragmentData.contains { line.range(of: $0) != nil }
+        }
 
         while true {
             let chunk = try handle.read(upToCount: 64 * 1024) ?? Data()
@@ -31,8 +37,10 @@ public enum JSONLReader {
                 buffer.removeSubrange(...newline)
                 lineNumber += 1
                 guard !line.isEmpty else { continue }
+                let lineData = Data(line)
+                guard shouldRead(lineData) else { continue }
                 do {
-                    let json = try JSONSerialization.jsonObject(with: Data(line))
+                    let json = try JSONSerialization.jsonObject(with: lineData)
                     guard let object = json as? [String: Any] else {
                         invalidLines += 1
                         continue
@@ -47,6 +55,9 @@ public enum JSONLReader {
 
         if !buffer.isEmpty {
             lineNumber += 1
+            guard shouldRead(buffer) else {
+                return JSONLReadSummary(validObjects: validObjects, invalidLines: invalidLines)
+            }
             do {
                 let json = try JSONSerialization.jsonObject(with: buffer)
                 if let object = json as? [String: Any] {

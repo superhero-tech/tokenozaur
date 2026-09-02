@@ -2,11 +2,16 @@ import AppKit
 import Foundation
 import TokenozercaCore
 
+private let activityInactivityThreshold: TimeInterval = 30 * 60
+
 struct MonitoredSession: Identifiable, Sendable {
     var id: String { candidate.id }
     let candidate: SessionCandidate
     let analysis: AnalysisResult
     let costReport: CostReport
+    let currentActivity: AnalysisResult
+    let currentActivityCostReport: CostReport
+    let currentActivityStartedAt: Date
 
     var provider: Provider { candidate.metadata.provider }
     var modifiedAt: Date { candidate.modifiedAt }
@@ -18,6 +23,37 @@ struct MonitoredSession: Identifiable, Sendable {
         }
         return "Rozmowa \(candidate.metadata.sessionID.prefix(8))"
     }
+}
+
+enum UsagePeriod: String, CaseIterable, Identifiable, Sendable {
+    case today
+    case sevenDays
+    case month
+    case year
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .today: return "Dzisiaj"
+        case .sevenDays: return "7 dni"
+        case .month: return "Miesiąc"
+        case .year: return "Rok"
+        }
+    }
+}
+
+struct PeriodUsageSummary: Identifiable, Sendable {
+    var id: UsagePeriod { period }
+    let period: UsagePeriod
+    let startedAt: Date
+    let analysis: AnalysisResult
+    let costReport: CostReport
+}
+
+private struct HistoryFileSnapshot: Sendable {
+    let candidate: SessionCandidate
+    let session: ParsedSession
 }
 
 @MainActor
@@ -34,6 +70,9 @@ final class AppModel: ObservableObject {
     @Published var isMonitoring = false
     @Published var lastMonitoringRefresh: Date?
     @Published var monitoringWarnings: [String] = []
+    @Published var periodSummaries: [PeriodUsageSummary] = []
+    @Published var isRefreshingPeriods = false
+    @Published var periodWarnings: [String] = []
 
     let discovery: SessionDiscovery
     private let analyzer: SessionAnalyzer
@@ -41,6 +80,8 @@ final class AppModel: ObservableObject {
     private let store: RunStore
     private let exporter = BenchmarkExporter()
     private var baselinePaths: Set<String> = []
+    private var historyFileCache: [String: HistoryFileSnapshot] = [:]
+    private var lastPeriodRefresh: Date?
     private var timer: Timer?
 
     init(
@@ -55,6 +96,7 @@ final class AppModel: ObservableObject {
         self.activeRunID = runs.first(where: { $0.endedAt == nil })?.id
         startTimer()
         refreshMonitoredSessions()
+        refreshPeriodSummaries()
         refreshRecentSessions()
         refreshActiveRun()
     }
@@ -76,10 +118,10 @@ final class AppModel: ObservableObject {
             return "🦖 \(Self.compactTokens(tokens))"
         }
         guard let latest = monitoredSessions.first else { return "🦖" }
-        if latest.costReport.tokenCostUSD != nil {
-            return "🦖 \(Self.costLabel(latest.costReport))"
+        if latest.currentActivityCostReport.tokenCostUSD != nil {
+            return "🦖 \(Self.costLabel(latest.currentActivityCostReport))"
         }
-        return "🦖 \(Self.compactTokens(latest.analysis.totalUsage.total))"
+        return "🦖 \(Self.compactTokens(latest.currentActivity.totalUsage.total))"
     }
 
     func refreshMonitoredSessions() {
@@ -93,7 +135,7 @@ final class AppModel: ObservableObject {
 
         Task {
             let refreshed = await Task.detached(priority: .utility) { () -> ([MonitoredSession], [String]) in
-                let cutoff = Date().addingTimeInterval(-30 * 60)
+                let cutoff = Date().addingTimeInterval(-activityInactivityThreshold)
                 let candidates = Provider.allCases
                     .flatMap { discovery.recentDesktopSessions(provider: $0, limit: 6) }
                     .filter { $0.modifiedAt >= cutoff }
@@ -112,10 +154,17 @@ final class AppModel: ObservableObject {
                             rootURL: candidate.url,
                             provider: candidate.metadata.provider
                         )
+                        let activityStart = analysis.latestActivityStart(afterInactivity: activityInactivityThreshold)
+                            ?? analysis.root.startedAt
+                            ?? candidate.modifiedAt
+                        let currentActivity = analysis.filteringRecords(from: activityStart)
                         sessions.append(MonitoredSession(
                             candidate: candidate,
                             analysis: analysis,
-                            costReport: pricing.calculate(analysis)
+                            costReport: pricing.calculate(analysis),
+                            currentActivity: currentActivity,
+                            currentActivityCostReport: pricing.calculate(currentActivity),
+                            currentActivityStartedAt: activityStart
                         ))
                     } catch {
                         warnings.append("\(candidate.metadata.provider.displayName): \(error.localizedDescription)")
@@ -128,6 +177,91 @@ final class AppModel: ObservableObject {
             self.monitoringWarnings = refreshed.1
             self.lastMonitoringRefresh = Date()
             self.isMonitoring = false
+        }
+    }
+
+    func refreshPeriodSummaries() {
+        guard !isRefreshingPeriods else { return }
+        isRefreshingPeriods = true
+
+        let discovery = self.discovery
+        let pricing = self.pricingEngine
+
+        Task {
+            let allCandidates = await Task.detached(priority: .utility) {
+                Provider.allCases.flatMap { discovery.allDesktopSessionFiles(provider: $0) }
+            }.value
+            let now = Date()
+            let calendar = Calendar.autoupdatingCurrent
+            let today = calendar.startOfDay(for: now)
+            let starts: [(UsagePeriod, Date)] = [
+                (.today, today),
+                (.sevenDays, calendar.date(byAdding: .day, value: -6, to: today) ?? today),
+                (.month, calendar.dateInterval(of: .month, for: now)?.start ?? today),
+                (.year, calendar.dateInterval(of: .year, for: now)?.start ?? today)
+            ]
+            var workingCache = self.historyFileCache
+            var allWarnings: [String] = []
+
+            for (period, start) in starts {
+                let cached = workingCache
+                let candidates = allCandidates.filter { $0.modifiedAt >= start }
+                let refreshed = await Task.detached(priority: .utility) { () -> ([HistoryFileSnapshot], PeriodUsageSummary, [String]) in
+                    var snapshots: [HistoryFileSnapshot] = []
+                    var warnings: [String] = []
+                    for candidate in candidates {
+                        if let existing = cached[candidate.id], existing.candidate.modifiedAt == candidate.modifiedAt {
+                            snapshots.append(existing)
+                            continue
+                        }
+                        do {
+                            let parsed: ParsedSession
+                            switch candidate.metadata.provider {
+                            case .codex: parsed = try CodexLogAdapter().parse(at: candidate.url)
+                            case .claude: parsed = try ClaudeLogAdapter().parse(at: candidate.url)
+                            }
+                            snapshots.append(HistoryFileSnapshot(candidate: candidate, session: parsed))
+                        } catch {
+                            warnings.append("\(candidate.metadata.provider.displayName): \(error.localizedDescription)")
+                        }
+                    }
+                    let fallbackRoot = SessionMetadata(
+                        provider: .codex,
+                        sessionID: "period-summary",
+                        originator: "tokenozerca",
+                        sourceFile: "local-history",
+                        isDesktop: true
+                    )
+                    let combined = AnalysisResult(
+                        root: snapshots.first?.session.metadata ?? fallbackRoot,
+                        sessions: snapshots.map(\.session)
+                    )
+                    let analysis = combined.filteringRecords(from: start, through: now)
+                    let summary = PeriodUsageSummary(
+                        period: period,
+                        startedAt: start,
+                        analysis: analysis,
+                        costReport: pricing.calculate(analysis)
+                    )
+                    return (snapshots, summary, warnings)
+                }.value
+
+                for snapshot in refreshed.0 {
+                    workingCache[snapshot.candidate.id] = snapshot
+                }
+                allWarnings.append(contentsOf: refreshed.2)
+                self.historyFileCache = workingCache
+                self.periodSummaries.removeAll { $0.period == period }
+                self.periodSummaries.append(refreshed.1)
+                self.periodSummaries.sort {
+                    (UsagePeriod.allCases.firstIndex(of: $0.period) ?? 0)
+                        < (UsagePeriod.allCases.firstIndex(of: $1.period) ?? 0)
+                }
+                self.periodWarnings = Array(Set(allWarnings)).sorted()
+            }
+
+            self.lastPeriodRefresh = Date()
+            self.isRefreshingPeriods = false
         }
     }
 
@@ -298,6 +432,9 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 self?.refreshMonitoredSessions()
                 self?.refreshActiveRun()
+                if let self, Date().timeIntervalSince(self.lastPeriodRefresh ?? .distantPast) >= 30 {
+                    self.refreshPeriodSummaries()
+                }
             }
         }
     }

@@ -214,6 +214,39 @@ public struct AnalysisResult: Codable, Equatable, Sendable {
     }
 }
 
+public extension AnalysisResult {
+    func latestActivityStart(afterInactivity threshold: TimeInterval) -> Date? {
+        let timestamps = sessions
+            .flatMap(\.records)
+            .map(\.timestamp)
+            .sorted()
+        guard var start = timestamps.first else { return nil }
+        var previous = start
+        for timestamp in timestamps.dropFirst() {
+            if timestamp.timeIntervalSince(previous) >= threshold {
+                start = timestamp
+            }
+            previous = timestamp
+        }
+        return start
+    }
+
+    func filteringRecords(from start: Date, through end: Date = .distantFuture) -> AnalysisResult {
+        let filteredSessions = sessions.compactMap { session -> ParsedSession? in
+            let records = session.records.filter { $0.timestamp >= start && $0.timestamp <= end }
+            guard !records.isEmpty else { return nil }
+            return ParsedSession(
+                metadata: session.metadata,
+                records: records,
+                toolCallCount: session.toolCallCount,
+                warnings: session.warnings,
+                parserVersion: session.parserVersion
+            )
+        }
+        return AnalysisResult(root: root, sessions: filteredSessions)
+    }
+}
+
 public enum CheckpointKind: String, Codable, CaseIterable, Sendable {
     case firstResult = "first_result"
     case accepted

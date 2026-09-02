@@ -24,7 +24,10 @@ public struct CodexLogAdapter: Sendable {
         var toolCalls = 0
         var sequence = 0
 
-        let summary = try JSONLReader.forEachObject(at: url) { object, lineNumber in
+        let summary = try JSONLReader.forEachObject(
+            at: url,
+            lineMustContainOneOf: ["session_meta", "turn_context", "token_count", "custom_tool_call"]
+        ) { object, lineNumber in
             let type = object["type"] as? String
 
             if type == "session_meta", let payload = object["payload"] as? [String: Any] {

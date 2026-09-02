@@ -27,10 +27,16 @@ Tokenożerca otwiera te pliki wyłącznie do odczytu. Nie wysyła transkryptów 
 
 1. Kliknij ikonę `🦖` w pasku menu.
 2. Tokenożerca automatycznie pokaże root sessions Codex Desktop i Claude Desktop aktualizowane w ostatnich 30 minutach.
-3. Każda karta pokazuje łączne tokeny, model i API-equivalent cost. Szczegóły zawierają podział na input, cache, output i reasoning/thinking.
+3. Każda karta pokazuje tokeny i API-equivalent cost od ostatniego wznowienia. Po rozwinięciu widać również sumę całego wątku, model oraz podział na input, cache, output i reasoning/thinking.
 4. Lista odświeża się co 5 sekund. Niezmienione pliki korzystają z ostatniego wyliczenia.
 
 Nie trzeba rozpoczynać pomiaru ani wklejać `RUN_ID`, aby zobaczyć koszt zwykłej rozmowy.
+
+Sesja znika z aktywnej listy po 30 minutach bez nowych wpisów w logu. Następna wiadomość po tej przerwie rozpoczyna nowy blok `Od ostatniego wznowienia`.
+
+## Zużycie w czasie
+
+Panel `Zużycie` sumuje tokeny i koszt obu narzędzi dla czterech nakładających się okresów: dzisiaj, ostatnie 7 dni wraz z dzisiaj, bieżący miesiąc i bieżący rok. Usage jest przypisywany do timestampu konkretnej odpowiedzi, więc wznowienie starego wątku nie przypisuje całej jego historii do bieżącego dnia.
 
 ## Benchmark kontrolowany
 
@@ -53,7 +59,7 @@ Snapshot stawek ma identyfikator `webinar-2026-09-02-v1`. Nieznany model otrzymu
 ## Znane ograniczenia
 
 - Przed webinarem trzeba wykonać świeży kontrolowany run z jednym subagentem w każdej aplikacji oraz ręczny dry run całego interfejsu.
-- Automatyczne sesje nie są jeszcze zapisywane jako trwała historia. Baza wszystkich rozmów, filtrowanie i późniejsze przeliczanie to zaplanowany kolejny etap; obecna historia obejmuje kontrolowane benchmarki.
+- Automatyczne sesje nie są jeszcze kopiowane do własnej trwałej bazy. Panel okresowy rekonstruuje historię z lokalnych logów dostawców; osobna baza, filtrowanie i późniejsze przeliczanie pozostają zaplanowanym kolejnym etapem.
 - Nieujawnione opłaty za narzędzia nie są doliczane; raport mówi o tym wprost.
 - Aplikacja co 5 sekund ponownie analizuje przypięte pliki. Jest to wystarczające dla obecnych logów, ale bardzo duże, wielodniowe sesje mogą wymagać później odczytu przyrostowego.
 - Format lokalnych logów dostawców nie jest publicznym, stabilnym API. Zmiana formatu może wymagać aktualizacji parsera.

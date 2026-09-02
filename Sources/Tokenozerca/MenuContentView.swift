@@ -10,6 +10,7 @@ struct MenuContentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                periodOverview
                 liveSessions
                 benchmark
                 footer
@@ -26,6 +27,102 @@ struct MenuContentView: View {
         .onAppear {
             benchmarkExpanded = model.activeRun != nil
         }
+    }
+
+    private var periodOverview: some View {
+        let maxTokens = max(1, model.periodSummaries.map { $0.analysis.totalUsage.total }.max() ?? 1)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Zużycie").font(.headline)
+                    Text("Codex + Claude")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if model.isRefreshingPeriods {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button { model.refreshPeriodSummaries() } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Przelicz okresy")
+                }
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(UsagePeriod.allCases) { period in
+                    if let summary = model.periodSummaries.first(where: { $0.period == period }) {
+                        periodCard(summary, maxTokens: maxTokens)
+                    } else {
+                        periodPlaceholder(period)
+                    }
+                }
+            }
+
+            Text("Usage według czasu odpowiedzi. Okresy nakładają się.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if let warning = model.periodWarnings.first {
+                Text(warning)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private func periodCard(_ summary: PeriodUsageSummary, maxTokens: Int64) -> some View {
+        let tokens = summary.analysis.totalUsage.total
+        let ratio = sqrt(Double(tokens) / Double(maxTokens))
+        let color = summary.costReport.accuracy == .exact ? Color.green : Color.orange
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(summary.period.displayName)
+                    .font(.caption.bold())
+                Spacer()
+                Text(AppModel.costLabel(summary.costReport))
+                    .font(.caption.bold().monospacedDigit())
+                    .foregroundStyle(summary.costReport.accuracy == .exact ? Color.primary : Color.orange)
+            }
+            Text("\(AppModel.compactTokens(tokens)) tokenów")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.quaternary)
+                    Capsule()
+                        .fill(color)
+                        .frame(width: max(tokens > 0 ? 4 : 0, geometry.size.width * ratio))
+                }
+            }
+            .frame(height: 4)
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func periodPlaceholder(_ period: UsagePeriod) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(period.displayName)
+                .font(.caption.bold())
+            HStack(spacing: 6) {
+                if model.isRefreshingPeriods {
+                    ProgressView().controlSize(.mini)
+                    Text("Przeliczam…")
+                } else {
+                    Text("Brak danych")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            Capsule()
+                .fill(.quaternary)
+                .frame(height: 4)
+        }
+        .padding(10)
+        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var liveSessions: some View {
@@ -77,8 +174,35 @@ struct MenuContentView: View {
 
     private func liveSessionCard(_ session: MonitoredSession) -> some View {
         DisclosureGroup {
-            sessionDetails(session.analysis, report: session.costReport)
-                .padding(.top, 8)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Od ostatniego wznowienia")
+                        .font(.caption.bold())
+                    Spacer()
+                    Text(session.currentActivityStartedAt, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                sessionDetails(session.currentActivity, report: session.currentActivityCostReport)
+                Divider()
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Cały wątek").font(.caption.bold())
+                        Text("Od początku zapisanej rozmowy")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(AppModel.compactTokens(session.analysis.totalUsage.total))
+                            .font(.caption.bold().monospacedDigit())
+                        Text(AppModel.costLabel(session.costReport))
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(session.costReport.accuracy == .exact ? Color.secondary : Color.orange)
+                    }
+                }
+            }
+            .padding(.top, 8)
         } label: {
             HStack(alignment: .center, spacing: 10) {
                 Text(session.provider == .codex ? "Cx" : "Cl")
@@ -103,11 +227,14 @@ struct MenuContentView: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(AppModel.compactTokens(session.analysis.totalUsage.total))
+                    Text("od wznowienia")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(AppModel.compactTokens(session.currentActivity.totalUsage.total))
                         .font(.caption.bold().monospacedDigit())
-                    Text(AppModel.costLabel(session.costReport))
+                    Text(AppModel.costLabel(session.currentActivityCostReport))
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(session.costReport.accuracy == .exact ? Color.secondary : Color.orange)
+                        .foregroundStyle(session.currentActivityCostReport.accuracy == .exact ? Color.secondary : Color.orange)
                 }
             }
         }

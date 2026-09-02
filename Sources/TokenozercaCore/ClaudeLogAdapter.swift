@@ -21,7 +21,10 @@ public struct ClaudeLogAdapter: Sendable {
         var toolCallsByMessageID: [String: Int] = [:]
         var warnings: [String] = []
 
-        let summary = try JSONLReader.forEachObject(at: url) { object, lineNumber in
+        let summary = try JSONLReader.forEachObject(
+            at: url,
+            lineMustContainOneOf: ["\"type\":\"assistant\"", "\"entrypoint\":"]
+        ) { object, lineNumber in
             if let candidate = Self.metadata(from: object, sourceFile: url.path, forcedParentID: rootSessionID),
                sessionMetadata == nil || sessionMetadata?.originator == "unknown" {
                 sessionMetadata = candidate

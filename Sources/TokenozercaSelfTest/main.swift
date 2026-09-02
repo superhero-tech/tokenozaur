@@ -122,6 +122,18 @@ do {
     let longReport = PricingEngine().calculate(AnalysisResult(root: longMetadata, sessions: [longSession]))
     check(longReport.tokenCostUSD.map { NSDecimalNumber(decimal: $0).stringValue } == "3.0375", "Claude long-context premium")
 
+    let activityBase = Date(timeIntervalSince1970: 1_000)
+    let activityRecords = [
+        UsageRecord(id: "activity-1", provider: .claude, sessionID: "activity", requestID: "1", modelID: "claude-opus-5", timestamp: activityBase, usage: UsageBreakdown(inputUncached: 10), sourceFile: "/tmp/activity"),
+        UsageRecord(id: "activity-2", provider: .claude, sessionID: "activity", requestID: "2", modelID: "claude-opus-5", timestamp: activityBase.addingTimeInterval(10 * 60), usage: UsageBreakdown(inputUncached: 20), sourceFile: "/tmp/activity"),
+        UsageRecord(id: "activity-3", provider: .claude, sessionID: "activity", requestID: "3", modelID: "claude-opus-5", timestamp: activityBase.addingTimeInterval(45 * 60), usage: UsageBreakdown(inputUncached: 30), sourceFile: "/tmp/activity")
+    ]
+    let activitySession = ParsedSession(metadata: longMetadata, records: activityRecords, parserVersion: "test")
+    let activityAnalysis = AnalysisResult(root: longMetadata, sessions: [activitySession])
+    let resumedAt = activityAnalysis.latestActivityStart(afterInactivity: 30 * 60)
+    check(resumedAt == activityRecords[2].timestamp, "Activity resumes after 30 minute gap")
+    check(activityAnalysis.filteringRecords(from: resumedAt!).totalUsage.total == 30, "Activity slice excludes thread history")
+
     let exportRun = BenchmarkRun(runID: "BUILD_CODEX_01", label: "Build", provider: .codex, endedAt: Date(), lastAnalysis: AnalysisResult(root: codex.metadata, sessions: [codex]), lastCostReport: knownReport)
     let csv = BenchmarkExporter().csv(runs: [exportRun])
     check(csv.contains("webinar-2026-09-02-v1") && csv.contains("BUILD_CODEX_01"), "Auditable CSV export")
