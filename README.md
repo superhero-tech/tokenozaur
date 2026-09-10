@@ -5,6 +5,8 @@
 
 Tokenozaur to natywna aplikacja do paska menu macOS. Monitoruje lokalne, interaktywne sesje Codexa i Claude Code, pokazuje zużycie tokenów oraz przelicza je na koszt według cennika API.
 
+Powstał jako część [AI Product Heroes](https://aiproductheroes.pl) — programu, w którym product people uczą się budować prawdziwe produkty w erze AI — i służy nam do testowania narzędzi agentowych na danych, a nie na wrażeniach.
+
 Nie wysyła logów do chmury. Własna baza przechowuje wyłącznie metadane użycia — bez promptów, odpowiedzi i treści wywołań narzędzi.
 
 ## Co potrafi
@@ -144,3 +146,11 @@ Nieznany model otrzymuje status `unavailable` zamiast zmyślonej ceny. Nieznany 
 ## Status projektu
 
 To jest **alpha**, nie stabilne wydanie. Najważniejsze przed wersją beta: inkrementalny parser bardzo długich sesji, automatyczne testy na kolejnych realnych formatach logów oraz podpisany i notarized build macOS.
+
+## Kto za tym stoi
+
+Tokenozaura tworzą Wojtek Strzałkowski i Piotr Kacała — założyciele [Superhero.tech](https://superhero.tech) i twórcy [AI Product Heroes](https://aiproductheroes.pl).
+
+Budujemy produkty i uczymy Product Builderów. Tokenozaur powstał z praktycznej potrzeby: chcieliśmy porównywać Codexa i Claude Code na podstawie czasu, tokenów i API-equivalent cost, zamiast oceniać je po efektownym demo.
+
+W [newsletterze Superhero.tech](https://newsletter.superhero.tech) publikujemy to, co testujemy, co nie zadziałało i czego uczymy się podczas budowania produktów z AI.
