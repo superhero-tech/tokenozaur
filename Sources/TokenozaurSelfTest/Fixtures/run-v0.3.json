@@ -1,0 +1,34 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000003",
+    "runID": "OLD_CODEX_03",
+    "label": "Old run",
+    "provider": "codex",
+    "createdAt": "2026-09-01T10:00:00Z",
+    "checkpoints": [],
+    "lastAnalysis": {
+      "root": {"provider":"codex","sessionID":"old-session","originator":"codex_work_desktop","sourceFile":"/tmp/old.jsonl","isDesktop":true},
+      "sessions": [{
+        "metadata": {"provider":"codex","sessionID":"old-session","originator":"codex_work_desktop","sourceFile":"/tmp/old.jsonl","isDesktop":true},
+        "records": [{"id":"old-record","provider":"codex","sessionID":"old-session","requestID":"old-request","modelID":"gpt-5.6-sol","timestamp":"2026-09-01T10:00:01Z","usage":{"inputUncached":100,"inputCachedRead":0,"cacheWrite5m":0,"cacheWrite1h":0,"output":10,"reasoningOrThinking":1},"serverToolUseCount":0,"sourceFile":"/tmp/old.jsonl"}],
+        "toolCallCount": 0,
+        "warnings": [],
+        "parserVersion": "codex-jsonl-v1"
+      }],
+      "modelUsage": [{"modelID":"gpt-5.6-sol","usage":{"inputUncached":100,"inputCachedRead":0,"cacheWrite5m":0,"cacheWrite1h":0,"output":10,"reasoningOrThinking":1},"requestCount":1}],
+      "totalUsage": {"inputUncached":100,"inputCachedRead":0,"cacheWrite5m":0,"cacheWrite1h":0,"output":10,"reasoningOrThinking":1},
+      "toolCallCount": 0,
+      "warnings": [],
+      "analyzedAt": "2026-09-01T10:00:02Z"
+    },
+    "lastCostReport": {
+      "catalogSnapshotID":"webinar-2026-09-02-v1",
+      "calculatedAt":"2026-09-01T10:00:02Z",
+      "lines":[{"recordID":"old-record","provider":"codex","modelID":"gpt-5.6-sol","requestID":"old-request","components":[],"amountUSD":0.0006,"accuracy":"exact"}],
+      "tokenCostUSD":0.0006,
+      "accuracy":"exact",
+      "toolCostsIncluded":true,
+      "warnings":[]
+    }
+  }
+]

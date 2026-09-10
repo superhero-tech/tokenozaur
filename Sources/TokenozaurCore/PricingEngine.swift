@@ -1,0 +1,409 @@
+import Foundation
+
+public struct LongContextRule: Codable, Equatable, Sendable {
+  public let thresholdInputTokens: Int64
+  public let inputMultiplier: Decimal
+  public let outputMultiplier: Decimal
+
+  public init(thresholdInputTokens: Int64, inputMultiplier: Decimal, outputMultiplier: Decimal) {
+    self.thresholdInputTokens = thresholdInputTokens
+    self.inputMultiplier = inputMultiplier
+    self.outputMultiplier = outputMultiplier
+  }
+}
+
+public struct ModelPrice: Codable, Equatable, Identifiable, Sendable {
+  public var id: String { modelID }
+  public let provider: Provider
+  public let modelID: String
+  public let aliases: [String]
+  public let effectiveFrom: Date
+  public let inputPerMillion: Decimal
+  public let cachedReadPerMillion: Decimal
+  public let cacheWrite5mPerMillion: Decimal
+  public let cacheWrite1hPerMillion: Decimal
+  public let outputPerMillion: Decimal
+  public let fastMultiplier: Decimal?
+  public let longContextRule: LongContextRule?
+  public let sourceURL: String
+  public let note: String?
+
+  public init(
+    provider: Provider,
+    modelID: String,
+    aliases: [String] = [],
+    effectiveFrom: Date,
+    inputPerMillion: Decimal,
+    cachedReadPerMillion: Decimal,
+    cacheWrite5mPerMillion: Decimal,
+    cacheWrite1hPerMillion: Decimal,
+    outputPerMillion: Decimal,
+    fastMultiplier: Decimal? = nil,
+    longContextRule: LongContextRule? = nil,
+    sourceURL: String,
+    note: String? = nil
+  ) {
+    self.provider = provider
+    self.modelID = modelID
+    self.aliases = aliases
+    self.effectiveFrom = effectiveFrom
+    self.inputPerMillion = inputPerMillion
+    self.cachedReadPerMillion = cachedReadPerMillion
+    self.cacheWrite5mPerMillion = cacheWrite5mPerMillion
+    self.cacheWrite1hPerMillion = cacheWrite1hPerMillion
+    self.outputPerMillion = outputPerMillion
+    self.fastMultiplier = fastMultiplier
+    self.longContextRule = longContextRule
+    self.sourceURL = sourceURL
+    self.note = note
+  }
+}
+
+public struct PriceCatalog: Codable, Equatable, Sendable {
+  public let snapshotID: String
+  public let frozenAt: Date
+  public let prices: [ModelPrice]
+
+  public init(snapshotID: String, frozenAt: Date, prices: [ModelPrice]) {
+    self.snapshotID = snapshotID
+    self.frozenAt = frozenAt
+    self.prices = prices
+  }
+
+  public func price(for rawModelID: String, provider: Provider, at date: Date) -> ModelPrice? {
+    let normalized = rawModelID.lowercased()
+    return
+      prices
+      .compactMap { price -> (price: ModelPrice, matchLength: Int)? in
+        guard price.provider == provider, price.effectiveFrom <= date else { return nil }
+        let identifiers = [price.modelID] + price.aliases
+        let matchLength = identifiers.compactMap { identifier -> Int? in
+          let candidate = identifier.lowercased()
+          return normalized == candidate || normalized.hasPrefix(candidate + "-")
+            ? candidate.count
+            : nil
+        }.max()
+        guard let matchLength else { return nil }
+        return (price, matchLength)
+      }
+      .sorted { lhs, rhs in
+        if lhs.matchLength != rhs.matchLength {
+          return lhs.matchLength > rhs.matchLength
+        }
+        return lhs.price.effectiveFrom > rhs.price.effectiveFrom
+      }
+      .first?.price
+  }
+
+  public static let webinar2026September02: PriceCatalog = {
+    let formatter = ISO8601DateFormatter()
+    let date = formatter.date(from: "2026-09-02T00:00:00Z") ?? Date(timeIntervalSince1970: 0)
+    return PriceCatalog(
+      snapshotID: "webinar-2026-09-02-v2",
+      frozenAt: date,
+      prices: [
+        ModelPrice(
+          provider: .codex,
+          modelID: "gpt-5.6-sol",
+          aliases: ["gpt-5.6-sol-chatgpt"],
+          effectiveFrom: date,
+          inputPerMillion: 4,
+          cachedReadPerMillion: Decimal(string: "0.4")!,
+          cacheWrite5mPerMillion: 5,
+          cacheWrite1hPerMillion: 5,
+          outputPerMillion: 20,
+          fastMultiplier: 2,
+          longContextRule: LongContextRule(
+            thresholdInputTokens: 272_000,
+            inputMultiplier: 2,
+            outputMultiplier: Decimal(string: "1.5")!
+          ),
+          sourceURL: "https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+          note: "API-equivalent pricing; cache write uses the documented 1.25× input rate."
+        ),
+        ModelPrice(
+          provider: .claude,
+          modelID: "claude-fable-5-1",
+          aliases: ["fable-5-1"],
+          effectiveFrom: date,
+          inputPerMillion: 10,
+          cachedReadPerMillion: Decimal(string: "0.25")!,
+          cacheWrite5mPerMillion: Decimal(string: "12.5")!,
+          cacheWrite1hPerMillion: 20,
+          outputPerMillion: 50,
+          sourceURL: "https://platform.claude.com/docs/en/models/fable-5-1/overview",
+          note:
+            "API-equivalent standard pricing; Fable 5.1 cache reads use the documented $0.25/MTok rate."
+        ),
+        ModelPrice(
+          provider: .claude,
+          modelID: "claude-fable-5",
+          aliases: ["fable", "fable-5"],
+          effectiveFrom: date,
+          inputPerMillion: 10,
+          cachedReadPerMillion: 1,
+          cacheWrite5mPerMillion: Decimal(string: "12.5")!,
+          cacheWrite1hPerMillion: 20,
+          outputPerMillion: 50,
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note: "API-equivalent standard pricing."
+        ),
+        ModelPrice(
+          provider: .claude,
+          modelID: "claude-opus-5",
+          aliases: ["opus", "opus-5"],
+          effectiveFrom: date,
+          inputPerMillion: 5,
+          cachedReadPerMillion: Decimal(string: "0.5")!,
+          cacheWrite5mPerMillion: Decimal(string: "6.25")!,
+          cacheWrite1hPerMillion: 10,
+          outputPerMillion: 25,
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note:
+            "API-equivalent standard pricing; Claude 4.6+ uses standard rates across the full 1M context window."
+        ),
+        ModelPrice(
+          provider: .claude,
+          modelID: "claude-opus-4-8",
+          aliases: ["opus-4-8"],
+          effectiveFrom: date,
+          inputPerMillion: 5,
+          cachedReadPerMillion: Decimal(string: "0.5")!,
+          cacheWrite5mPerMillion: Decimal(string: "6.25")!,
+          cacheWrite1hPerMillion: 10,
+          outputPerMillion: 25,
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note: "API-equivalent standard pricing."
+        ),
+        ModelPrice(
+          provider: .claude,
+          modelID: "claude-sonnet-5",
+          aliases: ["sonnet", "sonnet-5"],
+          effectiveFrom: date,
+          inputPerMillion: 2,
+          cachedReadPerMillion: Decimal(string: "0.2")!,
+          cacheWrite5mPerMillion: Decimal(string: "2.5")!,
+          cacheWrite1hPerMillion: 4,
+          outputPerMillion: 10,
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note: "API-equivalent standard pricing."
+        ),
+        ModelPrice(
+          provider: .claude,
+          modelID: "claude-haiku-4-5",
+          aliases: ["haiku", "haiku-4-5"],
+          effectiveFrom: date,
+          inputPerMillion: 1,
+          cachedReadPerMillion: Decimal(string: "0.1")!,
+          cacheWrite5mPerMillion: Decimal(string: "1.25")!,
+          cacheWrite1hPerMillion: 2,
+          outputPerMillion: 5,
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note: "API-equivalent standard pricing."
+        ),
+      ]
+    )
+  }()
+}
+
+public struct CostComponent: Codable, Equatable, Sendable {
+  public let label: String
+  public let tokens: Int64
+  public let ratePerMillion: Decimal
+  public let multiplier: Decimal
+  public let amountUSD: Decimal
+}
+
+public struct CostLine: Codable, Equatable, Identifiable, Sendable {
+  public var id: String { recordID }
+  public let recordID: String
+  public let provider: Provider
+  public let modelID: String
+  public let requestID: String
+  public let serviceTier: ServiceTier?
+  public let tierMultiplier: Decimal?
+  public let components: [CostComponent]
+  public let amountUSD: Decimal?
+  public let accuracy: MeasurementAccuracy
+  public let warning: String?
+
+  public init(
+    recordID: String,
+    provider: Provider,
+    modelID: String,
+    requestID: String,
+    serviceTier: ServiceTier? = nil,
+    tierMultiplier: Decimal? = nil,
+    components: [CostComponent],
+    amountUSD: Decimal?,
+    accuracy: MeasurementAccuracy,
+    warning: String?
+  ) {
+    self.recordID = recordID
+    self.provider = provider
+    self.modelID = modelID
+    self.requestID = requestID
+    self.serviceTier = serviceTier
+    self.tierMultiplier = tierMultiplier
+    self.components = components
+    self.amountUSD = amountUSD
+    self.accuracy = accuracy
+    self.warning = warning
+  }
+}
+
+public struct CostReport: Codable, Equatable, Sendable {
+  public let catalogSnapshotID: String
+  public let calculatedAt: Date
+  public let lines: [CostLine]
+  public let tokenCostUSD: Decimal?
+  public let accuracy: MeasurementAccuracy
+  public let toolCostsIncluded: Bool
+  public let warnings: [String]
+
+  public init(
+    catalogSnapshotID: String,
+    calculatedAt: Date = Date(),
+    lines: [CostLine],
+    toolCostsIncluded: Bool,
+    warnings: [String],
+    sourceAccuracy: MeasurementAccuracy? = nil
+  ) {
+    self.catalogSnapshotID = catalogSnapshotID
+    self.calculatedAt = calculatedAt
+    self.lines = lines
+    let knownAmounts = lines.compactMap(\.amountUSD)
+    self.tokenCostUSD = knownAmounts.isEmpty ? nil : knownAmounts.reduce(Decimal.zero, +)
+    if lines.isEmpty || knownAmounts.isEmpty || sourceAccuracy == .unavailable {
+      self.accuracy = .unavailable
+    } else if knownAmounts.count == lines.count,
+      lines.allSatisfy({ $0.accuracy == .exact }),
+      sourceAccuracy != .partial
+    {
+      self.accuracy = .exact
+    } else {
+      self.accuracy = .partial
+    }
+    self.toolCostsIncluded = toolCostsIncluded
+    self.warnings = warnings
+  }
+}
+
+public struct PricingEngine: Sendable {
+  public let catalog: PriceCatalog
+
+  public init(catalog: PriceCatalog = .webinar2026September02) {
+    self.catalog = catalog
+  }
+
+  public func calculate(_ analysis: AnalysisResult) -> CostReport {
+    let records = analysis.sessions.flatMap(\.records)
+    var warnings = analysis.warnings
+    let lines = records.map { record -> CostLine in
+      guard
+        let price = catalog.price(
+          for: record.modelID, provider: record.provider, at: catalog.frozenAt)
+      else {
+        return CostLine(
+          recordID: record.id,
+          provider: record.provider,
+          modelID: record.modelID,
+          requestID: record.requestID,
+          serviceTier: record.serviceTier,
+          components: [],
+          amountUSD: nil,
+          accuracy: .unavailable,
+          warning: "Brak zamrożonej ceny dla modelu \(record.modelID)."
+        )
+      }
+
+      let longContext = price.longContextRule.flatMap { rule in
+        record.usage.totalInput > rule.thresholdInputTokens ? rule : nil
+      }
+      var lineAccuracy: MeasurementAccuracy = .exact
+      var lineWarnings: [String] = []
+      let tierMultiplier: Decimal
+      if record.provider == .codex, let fastMultiplier = price.fastMultiplier {
+        switch record.serviceTier {
+        case .fast:
+          tierMultiplier = fastMultiplier
+        case .standard:
+          tierMultiplier = 1
+        case .unknown, .none:
+          tierMultiplier = 1
+          lineAccuracy = .partial
+          lineWarnings.append("Nieznany tier Codexa; pokazano dolną granicę według Standard.")
+        }
+      } else {
+        tierMultiplier = 1
+      }
+      let inputMultiplier = (longContext?.inputMultiplier ?? 1) * tierMultiplier
+      let outputMultiplier = (longContext?.outputMultiplier ?? 1) * tierMultiplier
+      if longContext != nil {
+        lineWarnings.append("Zastosowano premium za długi kontekst.")
+      }
+      let components = [
+        component(
+          "Input", tokens: record.usage.inputUncached, rate: price.inputPerMillion,
+          multiplier: inputMultiplier),
+        component(
+          "Cached input", tokens: record.usage.inputCachedRead, rate: price.cachedReadPerMillion,
+          multiplier: inputMultiplier),
+        component(
+          "Cache write 5m", tokens: record.usage.cacheWrite5m, rate: price.cacheWrite5mPerMillion,
+          multiplier: inputMultiplier),
+        component(
+          "Cache write 1h", tokens: record.usage.cacheWrite1h, rate: price.cacheWrite1hPerMillion,
+          multiplier: inputMultiplier),
+        component(
+          "Output", tokens: record.usage.output, rate: price.outputPerMillion,
+          multiplier: outputMultiplier),
+      ].filter { $0.tokens > 0 }
+      let amount = components.reduce(Decimal.zero) { $0 + $1.amountUSD }
+      return CostLine(
+        recordID: record.id,
+        provider: record.provider,
+        modelID: record.modelID,
+        requestID: record.requestID,
+        serviceTier: record.serviceTier,
+        tierMultiplier: tierMultiplier,
+        components: components,
+        amountUSD: amount,
+        accuracy: lineAccuracy,
+        warning: lineWarnings.isEmpty ? nil : lineWarnings.joined(separator: " ")
+      )
+    }
+
+    if analysis.toolCallCount > 0 {
+      warnings.append(
+        "Wykryto \(analysis.toolCallCount) tool calls; raport obejmuje koszt tokenów, nie nieujawnione opłaty narzędziowe."
+      )
+    }
+    let unknownModels = Set(lines.filter { $0.amountUSD == nil }.map(\.modelID)).sorted()
+    if !unknownModels.isEmpty {
+      warnings.append("Nie wyceniono modeli: \(unknownModels.joined(separator: ", ")).")
+    }
+    warnings.append(contentsOf: Set(lines.compactMap(\.warning)).sorted())
+
+    return CostReport(
+      catalogSnapshotID: catalog.snapshotID,
+      lines: lines,
+      toolCostsIncluded: analysis.toolCallCount == 0,
+      warnings: warnings,
+      sourceAccuracy: analysis.measurementAccuracy
+    )
+  }
+
+  private func component(_ label: String, tokens: Int64, rate: Decimal, multiplier: Decimal)
+    -> CostComponent
+  {
+    let amount = Decimal(tokens) / 1_000_000 * rate * multiplier
+    return CostComponent(
+      label: label,
+      tokens: tokens,
+      ratePerMillion: rate,
+      multiplier: multiplier,
+      amountUSD: amount
+    )
+  }
+}
