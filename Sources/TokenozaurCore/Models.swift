@@ -176,7 +176,9 @@ public struct SessionMetadata: Codable, Equatable, Hashable, Identifiable, Senda
       .trimmingCharacters(in: .whitespacesAndNewlines)
     switch provider {
     case .codex:
-      return ["codex_cli_rs", "codex_tui", "codex_cli", "cli"].contains(normalized)
+      // codex_exec: Codex runs started by another agent (e.g. Claude Code via `codex exec`).
+      // Counted as personal usage and labelled "Exec".
+      return ["codex_cli_rs", "codex_tui", "codex_cli", "cli", "codex_exec"].contains(normalized)
     case .claude:
       return normalized == "cli"
     }
@@ -184,6 +186,7 @@ public struct SessionMetadata: Codable, Equatable, Hashable, Identifiable, Senda
 
   public var sourceDisplayName: String {
     if isDesktop { return "Desktop" }
+    if provider == .codex, originator.lowercased() == "codex_exec" { return "Exec" }
     if isInteractive { return "CLI" }
     return "Automatyzacja"
   }

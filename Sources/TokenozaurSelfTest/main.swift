@@ -154,7 +154,9 @@ do {
   check(
     codexCLIMetadata.isInteractive && codexCLIMetadata.sourceDisplayName == "CLI",
     "Codex CLI is interactive")
-  check(!codexExecMetadata.isInteractive, "Codex exec automation is excluded")
+  check(
+    codexExecMetadata.isInteractive && codexExecMetadata.sourceDisplayName == "Exec",
+    "Codex exec runs are counted as Exec")
   check(claude.records.count == 2, "Claude message deduplication")
   check(claude.toolCallCount == 1, "Claude deduplicated tool calls")
   check(

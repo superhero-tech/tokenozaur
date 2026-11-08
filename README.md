@@ -11,7 +11,7 @@ Nie wysyła logów do chmury. Własna baza przechowuje wyłącznie metadane uży
 
 ## Co potrafi
 
-- automatycznie wykrywa aktywne sesje Codex Desktop, Codex CLI, Claude Code Desktop i Claude Code CLI;
+- automatycznie wykrywa aktywne sesje Codex Desktop, Codex CLI, Codex exec, Claude Code Desktop i Claude Code CLI;
 - pokazuje tokeny i koszt od ostatniego wznowienia oraz dla całego wątku;
 - rozbija usage na uncached input, cache read/write, output i reasoning/thinking;
 - rozpoznaje tryb Codexa Standard/Fast i stosuje właściwy mnożnik;
@@ -70,7 +70,7 @@ Pakiet alpha ma 84 testy obejmujące między innymi:
 - Codex parent/child, nested children, guardian i replay;
 - aktywne oraz archiwalne sesje Codexa;
 - Claude sidechain i deduplikację wiadomości;
-- rozróżnienie Desktop, CLI i automatyzacji;
+- rozróżnienie Desktop, CLI, Exec i automatyzacji;
 - Standard/Fast oraz wspierane modele Claude;
 - trwałość SQLite, zmianę cennika i brak podwójnego naliczania;
 - granicę wznowienia po 30 minutach;
@@ -140,7 +140,7 @@ Nieznany model otrzymuje status `unavailable` zamiast zmyślonej ceny. Nieznany 
 - Nieujawnione opłaty za narzędzia nie są doliczane.
 - Już usuniętych rekordów usage nie da się odzyskać z samego `~/.claude/history.jsonl`.
 - Aktywna sesja jest ponownie analizowana od początku; ekstremalnie długie wątki mogą być kosztowne obliczeniowo.
-- Automatyzacje Claude `sdk-*` oraz Codex `codex_exec`, SDK i ACP są celowo wyłączone ze statystyk osobistego użycia.
+- Automatyzacje Claude `sdk-*` oraz Codex SDK i ACP są celowo wyłączone ze statystyk osobistego użycia. Sesje Codex `codex_exec` (np. zlecane przez Claude Code) są liczone i oznaczone jako „Exec”.
 - Zmiana lokalnego formatu JSONL przez dostawcę może wymagać aktualizacji parsera.
 
 ## Status projektu
