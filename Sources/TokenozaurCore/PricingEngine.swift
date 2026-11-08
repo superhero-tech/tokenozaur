@@ -99,9 +99,27 @@ public struct PriceCatalog: Codable, Equatable, Sendable {
     let formatter = ISO8601DateFormatter()
     let date = formatter.date(from: "2026-09-02T00:00:00Z") ?? Date(timeIntervalSince1970: 0)
     return PriceCatalog(
-      snapshotID: "webinar-2026-09-02-v2",
+      snapshotID: "pricing-2026-11-09-v3",
       frozenAt: date,
       prices: [
+        ModelPrice(
+          provider: .codex,
+          modelID: "gpt-6.1-sol",
+          effectiveFrom: date,
+          inputPerMillion: 2,
+          cachedReadPerMillion: Decimal(string: "0.1")!,
+          cacheWrite5mPerMillion: Decimal(string: "2.5")!,
+          cacheWrite1hPerMillion: Decimal(string: "2.5")!,
+          outputPerMillion: 10,
+          fastMultiplier: 2,
+          longContextRule: LongContextRule(
+            thresholdInputTokens: 272_000,
+            inputMultiplier: 2,
+            outputMultiplier: Decimal(string: "1.5")!
+          ),
+          sourceURL: "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+          note: "API-equivalent pricing; cache write uses the documented 30m write rate (1.25× input)."
+        ),
         ModelPrice(
           provider: .codex,
           modelID: "gpt-5.6-sol",
@@ -150,6 +168,20 @@ public struct PriceCatalog: Codable, Equatable, Sendable {
         ),
         ModelPrice(
           provider: .claude,
+          modelID: "claude-opus-5-5",
+          aliases: ["opus-5-5"],
+          effectiveFrom: date,
+          inputPerMillion: 4,
+          cachedReadPerMillion: Decimal(string: "0.2")!,
+          cacheWrite5mPerMillion: 5,
+          cacheWrite1hPerMillion: 8,
+          outputPerMillion: 20,
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note:
+            "API-equivalent standard pricing; Opus 5.5 cache reads use the documented 0.05× input rate."
+        ),
+        ModelPrice(
+          provider: .claude,
           modelID: "claude-opus-5",
           aliases: ["opus", "opus-5"],
           effectiveFrom: date,
@@ -177,6 +209,20 @@ public struct PriceCatalog: Codable, Equatable, Sendable {
         ),
         ModelPrice(
           provider: .claude,
+          modelID: "claude-sonnet-5-5",
+          aliases: ["sonnet-5-5"],
+          effectiveFrom: date,
+          inputPerMillion: 2,
+          cachedReadPerMillion: Decimal(string: "0.1")!,
+          cacheWrite5mPerMillion: Decimal(string: "2.5")!,
+          cacheWrite1hPerMillion: 4,
+          outputPerMillion: 10,
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note:
+            "API-equivalent standard pricing; Sonnet 5.5 cache reads use the documented 0.05× input rate."
+        ),
+        ModelPrice(
+          provider: .claude,
           modelID: "claude-sonnet-5",
           aliases: ["sonnet", "sonnet-5"],
           effectiveFrom: date,
@@ -187,6 +233,25 @@ public struct PriceCatalog: Codable, Equatable, Sendable {
           outputPerMillion: 10,
           sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
           note: "API-equivalent standard pricing."
+        ),
+        ModelPrice(
+          provider: .claude,
+          modelID: "claude-haiku-5-5",
+          aliases: ["haiku-5-5"],
+          effectiveFrom: date,
+          inputPerMillion: Decimal(string: "0.1")!,
+          cachedReadPerMillion: Decimal(string: "0.01")!,
+          cacheWrite5mPerMillion: Decimal(string: "0.125")!,
+          cacheWrite1hPerMillion: Decimal(string: "0.2")!,
+          outputPerMillion: Decimal(string: "0.5")!,
+          longContextRule: LongContextRule(
+            thresholdInputTokens: 100_000,
+            inputMultiplier: 5,
+            outputMultiplier: 5
+          ),
+          sourceURL: "https://platform.claude.com/docs/en/about-claude/pricing",
+          note:
+            "API-equivalent standard pricing; prompts over 100K input tokens (incl. cache) pay 5× all rates."
         ),
         ModelPrice(
           provider: .claude,

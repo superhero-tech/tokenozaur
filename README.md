@@ -65,7 +65,7 @@ CLANG_MODULE_CACHE_PATH="$PWD/.build/module-cache" \
 swift run --disable-sandbox TokenozaurSelfTest
 ```
 
-Pakiet alpha ma 84 testy obejmujące między innymi:
+Pakiet alpha ma 89 testów obejmujące między innymi:
 
 - Codex parent/child, nested children, guardian i replay;
 - aktywne oraz archiwalne sesje Codexa;
@@ -124,13 +124,13 @@ Zwykłe monitorowanie nie wymaga tworzenia runu ani wklejania identyfikatora.
 
 ## Cennik
 
-Wersja alpha zawiera zamrożony snapshot `webinar-2026-09-02-v2` dla:
+Wersja alpha zawiera zamrożony snapshot `pricing-2026-11-09-v3` dla:
 
-- `gpt-5.6-sol`;
+- `gpt-6.1-sol` i `gpt-5.6-sol`;
 - `claude-fable-5-1` i `claude-fable-5`;
-- `claude-opus-5` i `claude-opus-4-8`;
-- `claude-sonnet-5`;
-- `claude-haiku-4-5`.
+- `claude-opus-5-5`, `claude-opus-5` i `claude-opus-4-8`;
+- `claude-sonnet-5-5` i `claude-sonnet-5`;
+- `claude-haiku-5-5` (z wyższymi stawkami dla promptów powyżej 100K tokenów) i `claude-haiku-4-5`.
 
 Nieznany model otrzymuje status `unavailable` zamiast zmyślonej ceny. Nieznany tier Codexa zachowuje dolną granicę Standard i oznacza wynik jako `partial`.
 
